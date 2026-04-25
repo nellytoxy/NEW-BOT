@@ -15,9 +15,9 @@ logging.basicConfig(level=logging.INFO)
 # - stable Railway loop (NO asyncio)
 # ============================================================
 
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-BULL_CHAT_ID = os.getenv("CHAT_ID_BULL", "-1003965900583")
-BEAR_CHAT_ID = os.getenv("CHAT_ID_BEAR", "-1003723283209")
+BOT_TOKEN =  "8649950519:AAHb4UUejJZJuVuQjqL8nBqj69FW1k3tTmg"
+BULL_CHAT_ID =  "-1003965900583"
+BEAR_CHAT_ID = "-1003723283209"
 
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", "60"))
 
