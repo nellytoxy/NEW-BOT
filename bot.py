@@ -1,19 +1,23 @@
 import os
 import time
+import random
 import requests
 from datetime import datetime, timezone
+import logging
+logging.basicConfig(level=logging.INFO)
 
 # ============================================================
-# RAILWAY READY BINANCE SCANNER BOT (SYNC STABLE VERSION)
+# V5 ANTI-BLOCK RAILWAY BINANCE SCANNER BOT (SYNC STABLE)
 # FIXES:
-# - removed asyncio entirely
-# - environment-based config (no hardcoded secrets)
-# - stable loop for Railway
+# - Binance 451 mitigation (header rotation + retry backoff)
+# - Session reuse (faster + less blocking)
+# - safer request layer
+# - stable Railway loop (NO asyncio)
 # ============================================================
 
-BOT_TOKEN = "8649950519:AAHb4UUejJZJuVuQjqL8nBqj69FW1k3tTmg"
-BULL_CHAT_ID = "-1003965900583")
-BEAR_CHAT_ID = "-1003723283209")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "")
+BULL_CHAT_ID = os.getenv("CHAT_ID_BULL", "-1003965900583")
+BEAR_CHAT_ID = os.getenv("CHAT_ID_BEAR", "-1003723283209")
 
 SCAN_INTERVAL = int(os.getenv("SCAN_INTERVAL", "60"))
 
@@ -22,23 +26,44 @@ BINANCE_KLINES = "https://fapi.binance.com/fapi/v1/klines"
 TELEGRAM_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
 # ============================================================
-# SAFE HTTP
+# ANTI-BLOCK SESSION + HEADERS ROTATION
 # ============================================================
 
-def fetch_json(url, params=None, retries=3):
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json"
-    }
+session = requests.Session()
 
+HEADERS_POOL = [
+    {"User-Agent": "Mozilla/5.0"},
+    {"User-Agent": "Chrome/120.0"},
+    {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+]
+
+def get_headers():
+    return random.choice(HEADERS_POOL)
+
+# ============================================================
+# SAFE HTTP (ANTI BLOCK V5)
+# ============================================================
+
+def fetch_json(url, params=None, retries=5):
     for attempt in range(retries):
         try:
-            r = requests.get(url, params=params, headers=headers, timeout=20)
+            r = session.get(
+                url,
+                params=params,
+                headers=get_headers(),
+                timeout=15
+            )
+
             if r.status_code == 200:
                 return r.json()
+
+            # Binance 451 / blocking handling
+            print(f"HTTP {r.status_code} -> retrying ({attempt+1})")
+
         except Exception as e:
             print(f"Fetch error ({attempt+1}/{retries}): {e}")
-        time.sleep(1)
+
+        time.sleep(1.5 * (attempt + 1))
 
     return None
 
@@ -48,7 +73,9 @@ def fetch_json(url, params=None, retries=3):
 
 def get_symbols():
     data = fetch_json(BINANCE_EXCHANGE_INFO)
+
     if not data:
+        print("Failed to fetch exchange info")
         return []
 
     symbols = data.get("symbols", [])
@@ -76,7 +103,7 @@ def get_klines(symbol):
     )
 
 # ============================================================
-# SIGNAL ENGINE
+# SIMPLE SIGNAL ENGINE
 # ============================================================
 
 def detect_signal(klines):
@@ -114,7 +141,7 @@ def send_telegram(chat_id, msg):
         return
 
     try:
-        requests.post(
+        session.post(
             TELEGRAM_URL,
             json={"chat_id": chat_id, "text": msg},
             timeout=10
@@ -135,14 +162,16 @@ def build_message(symbol, side):
     )
 
 # ============================================================
-# MAIN LOOP (SYNC SAFE)
+# MAIN LOOP
 # ============================================================
 
 def scan_market():
     cache = set()
 
     while True:
-        print("Scanning market...")
+        print("\n==============================")
+        print("Starting market scan...")
+        print("==============================")
 
         symbols = get_symbols()
         if not symbols:
@@ -175,7 +204,7 @@ def scan_market():
                     send_telegram(BEAR_CHAT_ID, msg)
                     print("SHORT", sym)
 
-                time.sleep(0.1)
+                time.sleep(0.1)  # 100ms between symbols
 
             except Exception as e:
                 print("Error:", e)
@@ -184,8 +213,9 @@ def scan_market():
         time.sleep(SCAN_INTERVAL)
 
 # ============================================================
-# ENTRY POINT (FIXED)
+# ENTRY POINT
 # ============================================================
 
 if __name__ == "__main__":
+    print("V5 Anti-Block Bot Starting...")
     scan_market()
