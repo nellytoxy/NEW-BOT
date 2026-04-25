@@ -10,7 +10,7 @@ COPY bot.py .
 RUN mkdir -p /app/data
 
 ENV EXCHANGE=binance \
-    TESTNET=true \
+    TESTNET=false \
     SYMBOL=BTC/USDT:USDT \
     HTF=4h \
     MTF=1h \
